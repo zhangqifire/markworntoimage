@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时预览工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 100px);
+            margin-top: 20px;
+        }
+        .editor-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .preview-section {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            position: relative;
+        }
+        .download-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .download-button:hover {
+            background-color: #218838;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .type-selector {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .type-selector.active {
+            background-color: #007bff;
+            color: white;
+        }
+        #editor {
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            border: none;
+            border-radius: 8px;
+            resize: none;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #preview {
+            height: 100%;
+            overflow-y: auto;
+        }
+        #preview img {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button class="type-selector active" data-type="markdown">Markdown</button>
+        <button class="type-selector" data-type="html">HTML</button>
+        <button class="type-selector" data-type="svg">SVG</button>
+    </div>
+    <div class="container">
+        <div class="editor-section">
+            <textarea id="editor" placeholder="在此输入内容..."></textarea>
+        </div>
+        <div class="preview-section">
+            <button id="downloadBtn" class="download-button">下载图片</button>
+            <div id="preview"></div>
+        </div>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const typeSelectors = document.querySelectorAll('.type-selector');
+        let currentType = 'markdown';
+
+        // 更新预览内容
+        async function updatePreview() {
+            const content = editor.value;
+            try {
+                const response = await fetch(`/api/render/${currentType}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+                const data = await response.json();
+                
+                if (currentType === 'svg') {
+                    preview.innerHTML = data.svg;
+                    downloadBtn.style.display = 'block';
+                } else {
+                    preview.innerHTML = data.html;
+                    downloadBtn.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('渲染失败:', error);
+            }
+        }
+
+        // 切换编辑类型
+        typeSelectors.forEach(selector => {
+            selector.addEventListener('click', () => {
+                typeSelectors.forEach(s => s.classList.remove('active'));
+                selector.classList.add('active');
+                currentType = selector.dataset.type;
+                updatePreview();
+            });
+        });
+
+        // 监听输入变化
+        let debounceTimer;
+        editor.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updatePreview, 300);
+        });
+
+        // 下载功能
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        function downloadImage() {
+            if (currentType === 'svg') {
+                const svgElement = preview.querySelector('svg');
+                if (svgElement) {
+                    // 获取SVG的尺寸
+                    const svgWidth = svgElement.width.baseVal.value || svgElement.viewBox.baseVal.width || 800;
+                    const svgHeight = svgElement.height.baseVal.value || svgElement.viewBox.baseVal.height || 600;
+                    
+                    // 设置SVG的尺寸属性
+                    svgElement.setAttribute('width', svgWidth);
+                    svgElement.setAttribute('height', svgHeight);
+                    
+                    const svgData = new XMLSerializer().serializeToString(svgElement);
+                    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                    const URL = window.URL || window.webkitURL || window;
+                    const blobURL = URL.createObjectURL(blob);
+                    
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const img = new Image();
+                    
+                    img.onload = function() {
+                        canvas.width = svgWidth;
+                        canvas.height = svgHeight;
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+                        const pngData = canvas.toDataURL('image/png');
+                        const downloadLink = document.createElement('a');
+                        downloadLink.download = 'image.png';
+                        downloadLink.href = pngData;
+                        downloadLink.click();
+                        URL.revokeObjectURL(blobURL);
+                    };
+                    
+                    img.src = blobURL;
+                }
+            }
+        }
+
+        // 更新预览内容
+        async function updatePreview() {
+            const content = editor.value;
+            try {
+                const response = await fetch(`/api/render/${currentType}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+                const data = await response.json();
+                
+                if (currentType === 'svg') {
+                    preview.innerHTML = data.svg;
+                    downloadBtn.style.display = 'block';
+                } else {
+                    preview.innerHTML = data.html;
+                    downloadBtn.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('渲染失败:', error);
+            }
+        }
+
+        // 添加下载按钮点击事件
+        downloadBtn.addEventListener('click', downloadImage);
+
+        // 初始化预览
+        updatePreview();
+    </script>
+</body>
+</html>

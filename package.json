@@ -1,0 +1,24 @@
+{
+  "name": "markdown-html-svg-previewer",
+  "version": "1.0.0",
+  "description": "A real-time previewer for Markdown, HTML and SVG",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "markdown",
+    "html",
+    "svg",
+    "preview",
+    "real-time"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.21.2",
+    "marked": "^15.0.7",
+    "nodemon": "^3.1.9"
+  }
+}
